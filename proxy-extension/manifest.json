@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Proxied Browser",
+  "version": "1.1",
+  "description": "Proxy with automatic timezone spoofing, auth handling, and WebRTC leak prevention",
+  "permissions": ["proxy", "webRequest", "webRequestAuthProvider", "privacy", "storage", "scripting", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Proxy Settings"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["tz-config.js", "tz-inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    }
+  ]
+}

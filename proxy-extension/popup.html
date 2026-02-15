@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { width: 320px; font: 13px/1.4 system-ui, sans-serif; padding: 12px; color: #222; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.header h1 { font-size: 14px; font-weight: 600; }
+.toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 11px; cursor: pointer; transition: background .2s; }
+.toggle .slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s; }
+.toggle input:checked + .slider { background: #4caf50; }
+.toggle input:checked + .slider::before { transform: translateX(18px); }
+label { display: block; font-size: 11px; color: #666; margin-bottom: 3px; }
+input, select { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+input:focus, select:focus { outline: none; border-color: #4caf50; }
+.row { display: flex; gap: 8px; }
+.row > div { flex: 1; }
+.field { margin-bottom: 8px; }
+button { width: 100%; padding: 8px; background: #4caf50; color: #fff; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+button:hover { background: #43a047; }
+button:active { background: #388e3c; }
+.status { margin-top: 8px; padding: 6px 8px; border-radius: 4px; font-size: 12px; display: none; }
+.status.ok { display: block; background: #e8f5e9; color: #2e7d32; }
+.status.error { display: block; background: #ffebee; color: #c62828; }
+.status.info { display: block; background: #e3f2fd; color: #1565c0; }
+.tz { margin-top: 8px; font-size: 11px; color: #666; }
+.tz span { color: #222; font-weight: 500; }
+
+@media (prefers-color-scheme: dark) {
+  body { background: #1e1e1e; color: #ddd; }
+  label { color: #999; }
+  input, select { background: #2a2a2a; color: #ddd; border-color: #444; }
+  input:focus, select:focus { border-color: #4caf50; }
+  input::placeholder { color: #666; }
+  .toggle .slider { background: #555; }
+  .toggle .slider::before { background: #ccc; }
+  .status.ok { background: #1b3a1b; color: #6fcf6f; }
+  .status.error { background: #3a1b1b; color: #f08080; }
+  .status.info { background: #1b2a3a; color: #6fb8f0; }
+  .tz { color: #999; }
+  .tz span { color: #ddd; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Proxy Settings</h1>
+  <label class="toggle">
+    <input type="checkbox" id="enabled">
+    <span class="slider"></span>
+  </label>
+</div>
+
+<div class="field">
+  <label>Quick Paste</label>
+  <input type="text" id="quickpaste" placeholder="[protocol://]host:port:user:pass">
+</div>
+
+<div class="field">
+  <label>Protocol</label>
+  <select id="protocol">
+    <option value="http">HTTP</option>
+    <option value="https">HTTPS</option>
+    <option value="socks4">SOCKS4</option>
+    <option value="socks5">SOCKS5</option>
+  </select>
+</div>
+
+<div class="row">
+  <div class="field" style="flex:3">
+    <label>Host</label>
+    <input type="text" id="host" placeholder="proxy.example.com">
+  </div>
+  <div class="field" style="flex:1">
+    <label>Port</label>
+    <input type="text" id="port" placeholder="8080">
+  </div>
+</div>
+
+<div class="row">
+  <div class="field">
+    <label>Username</label>
+    <input type="text" id="user" placeholder="optional">
+  </div>
+  <div class="field">
+    <label>Password</label>
+    <input type="password" id="pass" placeholder="optional">
+  </div>
+</div>
+
+<button id="save">Save &amp; Apply</button>
+
+<div class="status" id="status"></div>
+<div class="tz" id="tzDisplay"></div>
+
+<script src="popup.js"></script>
+</body>
+</html>
