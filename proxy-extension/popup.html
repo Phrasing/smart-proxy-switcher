@@ -29,6 +29,13 @@ button:active { background: #388e3c; }
 .tz { margin-top: 8px; font-size: 11px; color: #666; }
 .tz span { color: #222; font-weight: 500; }
 
+.profile-bar { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.profile-bar select { flex: 1; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+.profile-bar select:focus { outline: none; border-color: #4caf50; }
+.icon-btn { width: 28px; height: 28px; padding: 0; margin: 0; background: #eee; color: #444; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; line-height: 26px; text-align: center; cursor: pointer; flex-shrink: 0; }
+.icon-btn:hover { background: #ddd; }
+.icon-btn:active { background: #ccc; }
+
 @media (prefers-color-scheme: dark) {
   body { background: #1e1e1e; color: #ddd; }
   label { color: #999; }
@@ -42,6 +49,11 @@ button:active { background: #388e3c; }
   .status.info { background: #1b2a3a; color: #6fb8f0; }
   .tz { color: #999; }
   .tz span { color: #ddd; }
+  .profile-bar select { background: #2a2a2a; color: #ddd; border-color: #444; }
+  .profile-bar select:focus { border-color: #4caf50; }
+  .icon-btn { background: #333; color: #ccc; border-color: #555; }
+  .icon-btn:hover { background: #444; }
+  .icon-btn:active { background: #555; }
 }
 </style>
 </head>
@@ -52,6 +64,13 @@ button:active { background: #388e3c; }
     <input type="checkbox" id="enabled">
     <span class="slider"></span>
   </label>
+</div>
+
+<div class="profile-bar">
+  <select id="profileSelect"></select>
+  <button id="profileRename" title="Rename" class="icon-btn">&#9998;</button>
+  <button id="profileAdd" title="Add" class="icon-btn">&#43;</button>
+  <button id="profileDelete" title="Delete" class="icon-btn">&times;</button>
 </div>
 
 <div class="field">

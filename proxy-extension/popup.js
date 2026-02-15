@@ -1,5 +1,7 @@
 const $ = id => document.getElementById(id);
 
+let currentState = null;
+
 const els = {
   enabled: $("enabled"),
   quickpaste: $("quickpaste"),
@@ -11,6 +13,10 @@ const els = {
   save: $("save"),
   status: $("status"),
   tz: $("tzDisplay"),
+  profileSelect: $("profileSelect"),
+  profileRename: $("profileRename"),
+  profileAdd: $("profileAdd"),
+  profileDelete: $("profileDelete"),
 };
 
 function showStatus(text, type) {
@@ -23,25 +29,42 @@ function showTZ(tz) {
   els.tz.innerHTML = tz ? "Timezone: <span>" + tz + "</span>" : "";
 }
 
-function populateForm(settings) {
-  if (!settings) return;
-  els.enabled.checked = !!settings.enabled;
-  els.protocol.value = settings.protocol || "http";
-  els.host.value = settings.host || "";
-  els.port.value = settings.port || "";
-  els.user.value = settings.user || "";
-  els.pass.value = settings.pass || "";
+function populateForm(profile) {
+  if (!profile) return;
+  els.protocol.value = profile.protocol || "http";
+  els.host.value = profile.host || "";
+  els.port.value = profile.port || "";
+  els.user.value = profile.user || "";
+  els.pass.value = profile.pass || "";
 }
 
-function getFormSettings() {
+function getFormProfile() {
   return {
     protocol: els.protocol.value,
     host: els.host.value.trim(),
     port: els.port.value.trim(),
     user: els.user.value.trim(),
     pass: els.pass.value.trim(),
-    enabled: els.enabled.checked,
   };
+}
+
+function renderProfiles(state) {
+  currentState = state;
+  els.enabled.checked = !!state.enabled;
+
+  // Populate dropdown
+  els.profileSelect.innerHTML = "";
+  for (const p of state.profiles) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    els.profileSelect.appendChild(opt);
+  }
+  els.profileSelect.value = state.activeProfileId;
+
+  // Fill form with active profile
+  const active = state.profiles.find(p => p.id === state.activeProfileId) || state.profiles[0];
+  populateForm(active);
 }
 
 // Quick paste: [protocol://]host:port[:user:pass]
@@ -67,30 +90,32 @@ els.quickpaste.addEventListener("input", () => {
   els.pass.value = parts.slice(3).join(":") || "";
 });
 
-// Load current settings on popup open
-chrome.runtime.sendMessage({ type: "getSettings" }, resp => {
+// Load current state on popup open
+chrome.runtime.sendMessage({ type: "getState" }, resp => {
   if (resp) {
-    populateForm(resp.settings);
+    renderProfiles(resp.state);
     showTZ(resp.timezone);
   }
 });
 
 // Save & Apply
 els.save.addEventListener("click", () => {
-  const settings = getFormSettings();
-  if (!settings.host || !settings.port) {
+  const formData = getFormProfile();
+  if (!formData.host || !formData.port) {
     showStatus("Host and port are required", "error");
     return;
   }
-  const isSocksAuth = settings.protocol.startsWith("socks") && (settings.user || settings.pass);
+  const isSocksAuth = formData.protocol.startsWith("socks") && (formData.user || formData.pass);
   if (isSocksAuth) {
     showStatus("SOCKS auth not supported by Chrome. Use HTTP or auth-free SOCKS.", "error");
     return;
   }
   showStatus("Applying...", "info");
-  chrome.runtime.sendMessage({ type: "saveSettings", settings }, resp => {
+  const profile = { id: currentState.activeProfileId, ...formData };
+  chrome.runtime.sendMessage({ type: "saveProfile", profile }, resp => {
     if (resp && resp.ok) {
-      const msg = settings.enabled ? "Proxy enabled" : "Proxy disabled";
+      renderProfiles(resp.state);
+      const msg = currentState.enabled ? "Proxy enabled" : "Settings saved";
       showStatus(resp.timezone ? msg + " — timezone detected" : msg, "ok");
       showTZ(resp.timezone);
     } else {
@@ -105,11 +130,65 @@ els.enabled.addEventListener("change", () => {
   showStatus(enabled ? "Enabling..." : "Disabling...", "info");
   chrome.runtime.sendMessage({ type: "toggleProxy", enabled }, resp => {
     if (resp && resp.ok) {
+      renderProfiles(resp.state);
       showStatus(enabled ? "Proxy enabled" : "Proxy disabled", "ok");
       showTZ(resp.timezone);
     } else if (resp && resp.error === "No settings saved") {
       els.enabled.checked = false;
       showStatus("Enter proxy settings and click Save first", "error");
+    } else {
+      showStatus("Error: " + (resp && resp.error || "unknown"), "error");
+    }
+  });
+});
+
+// Switch profile
+els.profileSelect.addEventListener("change", () => {
+  const profileId = els.profileSelect.value;
+  chrome.runtime.sendMessage({ type: "switchProfile", profileId }, resp => {
+    if (resp && resp.ok) {
+      renderProfiles(resp.state);
+      showTZ(resp.timezone);
+    } else {
+      showStatus("Error: " + (resp && resp.error || "unknown"), "error");
+    }
+  });
+});
+
+// Add profile
+els.profileAdd.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "addProfile" }, resp => {
+    if (resp && resp.ok) {
+      renderProfiles(resp.state);
+      showTZ(resp.timezone);
+    } else {
+      showStatus("Error: " + (resp && resp.error || "unknown"), "error");
+    }
+  });
+});
+
+// Delete profile
+els.profileDelete.addEventListener("click", () => {
+  const profileId = els.profileSelect.value;
+  chrome.runtime.sendMessage({ type: "deleteProfile", profileId }, resp => {
+    if (resp && resp.ok) {
+      renderProfiles(resp.state);
+      showTZ(resp.timezone);
+    } else {
+      showStatus("Error: " + (resp && resp.error || "unknown"), "error");
+    }
+  });
+});
+
+// Rename profile
+els.profileRename.addEventListener("click", () => {
+  const profileId = els.profileSelect.value;
+  const current = currentState.profiles.find(p => p.id === profileId);
+  const name = window.prompt("Rename profile:", current ? current.name : "");
+  if (name === null || !name.trim()) return;
+  chrome.runtime.sendMessage({ type: "renameProfile", profileId, name: name.trim() }, resp => {
+    if (resp && resp.ok) {
+      renderProfiles(resp.state);
     } else {
       showStatus("Error: " + (resp && resp.error || "unknown"), "error");
     }
