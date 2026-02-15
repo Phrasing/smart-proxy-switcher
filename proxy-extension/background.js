@@ -2,8 +2,6 @@ let proxyUser = "";
 let proxyPass = "";
 let cachedTZ = null;
 
-// --- Proxy management ---
-
 async function applyProxy(settings) {
   const scheme = settings.protocol || "http";
   const schemeMap = { http: "http", https: "https", socks4: "socks4", socks5: "socks5" };
@@ -47,8 +45,6 @@ async function clearProxy() {
   cachedTZ = null;
 }
 
-// --- Timezone detection ---
-
 async function detectTimezone() {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -72,8 +68,6 @@ async function detectTimezone() {
   return null;
 }
 
-// --- Profile helpers ---
-
 function getActiveProfile(state) {
   return state.profiles.find(p => p.id === state.activeProfileId) || state.profiles[0];
 }
@@ -87,8 +81,6 @@ function makeDefaultState() {
     ],
   };
 }
-
-// --- Init ---
 
 async function init() {
   try {
@@ -166,8 +158,6 @@ async function init() {
     console.error("[proxy-extension] init() failed:", err);
   }
 }
-
-// --- Message handler (from popup) ---
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "getState") {
@@ -363,8 +353,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// --- Inject timezone into pages via MAIN world ---
-
 chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (!cachedTZ) return;
   try {
@@ -379,8 +367,6 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
     // Ignore errors for chrome://, edge cases
   }
 });
-
-// --- Auth handler ---
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, callback) => {
