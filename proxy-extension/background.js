@@ -159,196 +159,142 @@ async function init() {
   }
 }
 
+async function getState() {
+  const data = await chrome.storage.local.get(["proxyState", "proxyTZ"]);
+  return {
+    state: data.proxyState || makeDefaultState(),
+    timezone: data.proxyTZ || null,
+  };
+}
+
+async function saveProfile(msg) {
+  const data = await chrome.storage.local.get("proxyState");
+  const state = data.proxyState || makeDefaultState();
+  const idx = state.profiles.findIndex(p => p.id === msg.profile.id);
+  if (idx === -1) return { ok: false, error: "Profile not found" };
+  const existing = state.profiles[idx];
+  state.profiles[idx] = {
+    id: existing.id,
+    name: existing.name,
+    protocol: msg.profile.protocol,
+    host: msg.profile.host,
+    port: msg.profile.port,
+    user: msg.profile.user,
+    pass: msg.profile.pass,
+  };
+  await chrome.storage.local.set({ proxyState: state });
+  if (state.enabled && state.activeProfileId === msg.profile.id) {
+    await applyProxy(state.profiles[idx]);
+    const tz = await detectTimezone();
+    return { ok: true, state, timezone: tz };
+  }
+  const tzData = await chrome.storage.local.get("proxyTZ");
+  return { ok: true, state, timezone: tzData.proxyTZ || null };
+}
+
+async function toggleProxy(msg) {
+  const data = await chrome.storage.local.get("proxyState");
+  const state = data.proxyState;
+  if (!state) return { ok: false, error: "No settings saved" };
+  state.enabled = msg.enabled;
+  await chrome.storage.local.set({ proxyState: state });
+  if (state.enabled) {
+    const profile = getActiveProfile(state);
+    if (profile && profile.host) {
+      await applyProxy(profile);
+      const tz = await detectTimezone();
+      return { ok: true, state, timezone: tz };
+    }
+    return { ok: false, error: "Active profile has no host configured" };
+  }
+  await clearProxy();
+  cachedTZ = null;
+  await chrome.storage.local.remove("proxyTZ");
+  return { ok: true, state, timezone: null };
+}
+
+async function switchProfile(msg) {
+  const data = await chrome.storage.local.get("proxyState");
+  const state = data.proxyState;
+  state.activeProfileId = msg.profileId;
+  await chrome.storage.local.set({ proxyState: state });
+  if (state.enabled) {
+    const profile = getActiveProfile(state);
+    if (profile && profile.host) {
+      await applyProxy(profile);
+      const tz = await detectTimezone();
+      return { ok: true, state, timezone: tz };
+    }
+    await clearProxy();
+    cachedTZ = null;
+    await chrome.storage.local.remove("proxyTZ");
+    return { ok: true, state, timezone: null };
+  }
+  const tzData = await chrome.storage.local.get("proxyTZ");
+  return { ok: true, state, timezone: tzData.proxyTZ || null };
+}
+
+async function addProfile() {
+  const data = await chrome.storage.local.get("proxyState");
+  const state = data.proxyState || makeDefaultState();
+  const newProfile = {
+    id: "p" + Date.now(),
+    name: "Profile " + state.profiles.length,
+    protocol: "http",
+    host: "",
+    port: "",
+    user: "",
+    pass: "",
+  };
+  state.profiles.push(newProfile);
+  state.activeProfileId = newProfile.id;
+  await chrome.storage.local.set({ proxyState: state });
+  const tzData = await chrome.storage.local.get("proxyTZ");
+  return { ok: true, state, timezone: tzData.proxyTZ || null };
+}
+
+async function deleteProfile(msg) {
+  if (msg.profileId === "default") return { ok: false, error: "Cannot delete the Default profile" };
+  const data = await chrome.storage.local.get("proxyState");
+  const state = data.proxyState;
+  state.profiles = state.profiles.filter(p => p.id !== msg.profileId);
+  if (state.activeProfileId === msg.profileId) {
+    state.activeProfileId = "default";
+    if (state.enabled) {
+      const profile = getActiveProfile(state);
+      if (profile && profile.host) {
+        await applyProxy(profile);
+      } else {
+        await clearProxy();
+        cachedTZ = null;
+        await chrome.storage.local.remove("proxyTZ");
+      }
+    }
+  }
+  await chrome.storage.local.set({ proxyState: state });
+  const tzData = await chrome.storage.local.get("proxyTZ");
+  return { ok: true, state, timezone: tzData.proxyTZ || null };
+}
+
+async function renameProfile(msg) {
+  const data = await chrome.storage.local.get("proxyState");
+  const state = data.proxyState;
+  const profile = state.profiles.find(p => p.id === msg.profileId);
+  if (!profile) return { ok: false, error: "Profile not found" };
+  profile.name = msg.name;
+  await chrome.storage.local.set({ proxyState: state });
+  return { ok: true, state };
+}
+
+const messageHandlers = {
+  getState, saveProfile, toggleProxy, switchProfile,
+  addProfile, deleteProfile, renameProfile,
+};
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "getState") {
-    chrome.storage.local.get(["proxyState", "proxyTZ"]).then(data => {
-      sendResponse({
-        state: data.proxyState || makeDefaultState(),
-        timezone: data.proxyTZ || null,
-      });
-    });
-    return true;
-  }
-
-  if (msg.type === "saveProfile") {
-    (async () => {
-      try {
-        const data = await chrome.storage.local.get("proxyState");
-        const state = data.proxyState || makeDefaultState();
-        const idx = state.profiles.findIndex(p => p.id === msg.profile.id);
-        if (idx === -1) {
-          sendResponse({ ok: false, error: "Profile not found" });
-          return;
-        }
-        // Update profile fields (keep id and name)
-        const existing = state.profiles[idx];
-        state.profiles[idx] = {
-          id: existing.id,
-          name: existing.name,
-          protocol: msg.profile.protocol,
-          host: msg.profile.host,
-          port: msg.profile.port,
-          user: msg.profile.user,
-          pass: msg.profile.pass,
-        };
-        await chrome.storage.local.set({ proxyState: state });
-
-        // Re-apply if this is the active profile and proxy is enabled
-        if (state.enabled && state.activeProfileId === msg.profile.id) {
-          await applyProxy(state.profiles[idx]);
-          const tz = await detectTimezone();
-          sendResponse({ ok: true, state, timezone: tz });
-        } else {
-          const tzData = await chrome.storage.local.get("proxyTZ");
-          sendResponse({ ok: true, state, timezone: tzData.proxyTZ || null });
-        }
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.type === "toggleProxy") {
-    (async () => {
-      try {
-        const data = await chrome.storage.local.get("proxyState");
-        const state = data.proxyState;
-        if (!state) {
-          sendResponse({ ok: false, error: "No settings saved" });
-          return;
-        }
-        state.enabled = msg.enabled;
-        await chrome.storage.local.set({ proxyState: state });
-        if (state.enabled) {
-          const profile = getActiveProfile(state);
-          if (profile && profile.host) {
-            await applyProxy(profile);
-            const tz = await detectTimezone();
-            sendResponse({ ok: true, state, timezone: tz });
-          } else {
-            sendResponse({ ok: false, error: "Active profile has no host configured" });
-          }
-        } else {
-          await clearProxy();
-          cachedTZ = null;
-          await chrome.storage.local.remove("proxyTZ");
-          sendResponse({ ok: true, state, timezone: null });
-        }
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.type === "switchProfile") {
-    (async () => {
-      try {
-        const data = await chrome.storage.local.get("proxyState");
-        const state = data.proxyState;
-        state.activeProfileId = msg.profileId;
-        await chrome.storage.local.set({ proxyState: state });
-        if (state.enabled) {
-          const profile = getActiveProfile(state);
-          if (profile && profile.host) {
-            await applyProxy(profile);
-            const tz = await detectTimezone();
-            sendResponse({ ok: true, state, timezone: tz });
-          } else {
-            await clearProxy();
-            cachedTZ = null;
-            await chrome.storage.local.remove("proxyTZ");
-            sendResponse({ ok: true, state, timezone: null });
-          }
-        } else {
-          const tzData = await chrome.storage.local.get("proxyTZ");
-          sendResponse({ ok: true, state, timezone: tzData.proxyTZ || null });
-        }
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.type === "addProfile") {
-    (async () => {
-      try {
-        const data = await chrome.storage.local.get("proxyState");
-        const state = data.proxyState || makeDefaultState();
-        const newProfile = {
-          id: "p" + Date.now(),
-          name: "Profile " + state.profiles.length,
-          protocol: "http",
-          host: "",
-          port: "",
-          user: "",
-          pass: "",
-        };
-        state.profiles.push(newProfile);
-        state.activeProfileId = newProfile.id;
-        await chrome.storage.local.set({ proxyState: state });
-        const tzData = await chrome.storage.local.get("proxyTZ");
-        sendResponse({ ok: true, state, timezone: tzData.proxyTZ || null });
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.type === "deleteProfile") {
-    (async () => {
-      try {
-        if (msg.profileId === "default") {
-          sendResponse({ ok: false, error: "Cannot delete the Default profile" });
-          return;
-        }
-        const data = await chrome.storage.local.get("proxyState");
-        const state = data.proxyState;
-        state.profiles = state.profiles.filter(p => p.id !== msg.profileId);
-        if (state.activeProfileId === msg.profileId) {
-          state.activeProfileId = "default";
-          // Re-apply default profile if enabled
-          if (state.enabled) {
-            const profile = getActiveProfile(state);
-            if (profile && profile.host) {
-              await applyProxy(profile);
-            } else {
-              await clearProxy();
-              cachedTZ = null;
-              await chrome.storage.local.remove("proxyTZ");
-            }
-          }
-        }
-        await chrome.storage.local.set({ proxyState: state });
-        const tzData = await chrome.storage.local.get("proxyTZ");
-        sendResponse({ ok: true, state, timezone: tzData.proxyTZ || null });
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.type === "renameProfile") {
-    (async () => {
-      try {
-        const data = await chrome.storage.local.get("proxyState");
-        const state = data.proxyState;
-        const profile = state.profiles.find(p => p.id === msg.profileId);
-        if (!profile) {
-          sendResponse({ ok: false, error: "Profile not found" });
-          return;
-        }
-        profile.name = msg.name;
-        await chrome.storage.local.set({ proxyState: state });
-        sendResponse({ ok: true, state });
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    })();
+  const handler = messageHandlers[msg.type];
+  if (handler) {
+    handler(msg).then(sendResponse).catch(e => sendResponse({ ok: false, error: e.message }));
     return true;
   }
 });
