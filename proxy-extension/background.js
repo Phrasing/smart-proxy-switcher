@@ -43,23 +43,35 @@ async function clearProxy() {
   cachedTZ = null;
 }
 
+async function fetchTimezone(url, extract) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    const data = await resp.json();
+    const tz = extract(data);
+    if (tz && tz.includes("/")) return tz;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+  return null;
+}
+
 async function detectTimezone() {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      const resp = await fetch("http://ip-api.com/json/?fields=timezone", {
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      const data = await resp.json();
-      if (data.timezone && data.timezone.includes("/")) {
-        cachedTZ = data.timezone;
-        await chrome.storage.local.set({ proxyTZ: data.timezone });
-        return data.timezone;
+      const tz =
+        await fetchTimezone("https://api.ipapi.is/", d => d.location?.timezone) ||
+        await fetchTimezone("http://ip-api.com/json/?fields=timezone", d => d.timezone);
+      if (tz) {
+        cachedTZ = tz;
+        await chrome.storage.local.set({ proxyTZ: tz });
+        return tz;
       }
     } catch (e) {
-      // retry after delay
+      // both providers failed — retry after delay
     }
     if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
   }

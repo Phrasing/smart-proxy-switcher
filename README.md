@@ -34,6 +34,6 @@ Chromium extension that routes traffic through a proxy and automatically spoofs 
 
 **Proxy** — configured via `chrome.proxy.settings` API with credentials supplied through `webRequest.onAuthRequired`.
 
-**Timezone** — on proxy enable, the background service worker fetches the proxy's timezone from [ip-api.com](http://ip-api.com). On each page navigation, it injects the timezone into the page's main world via `chrome.scripting.executeScript`, where `tz-inject.js` patches all Date/Intl APIs to report the spoofed timezone. A setter-trap fallback handles race conditions.
+**Timezone** — on proxy enable, the background service worker fetches the proxy's timezone from [ipapi.is](https://ipapi.is) (falling back to [ip-api.com](http://ip-api.com)). On each page navigation, it injects the timezone into the page's main world via `chrome.scripting.executeScript`, where `tz-inject.js` patches all Date/Intl APIs to report the spoofed timezone. A setter-trap fallback handles race conditions.
 
 **WebRTC** — `chrome.privacy.network.webRTCIPHandlingPolicy` is set to `disable_non_proxied_udp`.
